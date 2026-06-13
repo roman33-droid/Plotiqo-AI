@@ -388,7 +388,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <span className="font-bold tracking-tight text-lg text-[#fafafa]">
-              Reelo AI
+              Plotiqo AI
             </span>
             <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded-md bg-[#18181b] border border-[#27272a] text-emerald-400">
               Shorts Framework
@@ -489,7 +489,7 @@ export default function App() {
                 </span>
               </h1>
               <p className="text-[#a1a1aa] text-base sm:text-lg max-w-2xl leading-relaxed">
-                Reelo AI translates high-retention frameworks into production packages. Enter a video topic or link to generate dual-narrative timelines, cognitive open loops, and model-agnostic visual prompts.
+                Plotiqo AI translates high-retention frameworks into production packages. Enter a video topic or link to generate dual-narrative timelines, cognitive open loops, and model-agnostic visual prompts.
               </p>
               
               <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 w-full justify-center">
@@ -710,7 +710,7 @@ export default function App() {
                 <h4 className="text-xs font-mono text-emerald-400 font-bold uppercase tracking-wider">THE BEHAVIORAL SCIENCE OF SHORTS RETENTION</h4>
                 <h3 className="text-lg sm:text-xl font-bold text-[#fafafa]">The First 1.5 Seconds Rule</h3>
                 <p className="text-[#a1a1aa] text-xs max-w-2xl leading-relaxed">
-                  Audience retention science shows that saying fewer words, establishing a rapid personal obstacle loop immediately, and forcing the viewer's eyes to follow an unfolding curiosity loop increases loop-through rates by up to 134%. Reelo AI embeds this dynamic directly in your scripts.
+                  Audience retention science shows that saying fewer words, establishing a rapid personal obstacle loop immediately, and forcing the viewer's eyes to follow an unfolding curiosity loop increases loop-through rates by up to 134%. Plotiqo AI embeds this dynamic directly in your scripts.
                 </p>
               </div>
               <button 
@@ -1937,7 +1937,7 @@ export default function App() {
       {/* Global Footer */}
       <footer className="border-t border-[#27272a] bg-[#09090b] px-4 py-8 text-center text-xs text-[#71717a] max-w-7xl mx-auto w-full space-y-2 mt-auto font-sans">
         <p className="font-mono text-[11px]">
-          © 2026 Reelo AI — Engineered on advanced Cognitive Retention Dynamics benchmarks.
+          © 2026 Plotiqo AI — Engineered on advanced Cognitive Retention Dynamics benchmarks.
         </p>
         <p className="text-[10px]">
           Utilizing generative calculations. Visual model-agnostic camera prompts are fully compatible with Runway Gen-3/4, Kling, and Sora platforms.
