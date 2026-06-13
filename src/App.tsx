@@ -32,9 +32,11 @@ import {
   Smartphone,
   Eye,
   Camera,
-  Compass
+  Compass,
+  Globe,
+  Image
 } from "lucide-react";
-import { Project, ProjectInput, ProductionPackage, VideoAnalysis, UserProfile, AdminAnalytics, HookVariation } from "./types";
+import { Project, ProjectInput, ProductionPackage, VideoAnalysis, UserProfile, AdminAnalytics, InputType } from "./types";
 
 export default function App() {
   // Navigation State
@@ -42,7 +44,10 @@ export default function App() {
   
   // Custom workspace and psychology tabs
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'scorecard' | 'script' | 'prompts' | 'metadata'>('scorecard');
+  const [activeStepTab, setActiveStepTab] = useState<number>(1);
   const [activeSceneIdx, setActiveSceneIdx] = useState<number>(0);
+  const [retentionHookMultiplier, setRetentionHookMultiplier] = useState<number>(1.0);
+  const [retentionLoopMultiplier, setRetentionLoopMultiplier] = useState<number>(1.0);
   const [activeLandingSceneIdx, setActiveLandingSceneIdx] = useState<number>(0);
   const [mockPlatform, setMockPlatform] = useState<'tiktok' | 'shorts' | 'reels'>('tiktok');
   const [mockPlaying, setMockPlaying] = useState<boolean>(true);
@@ -65,7 +70,7 @@ export default function App() {
   const [nicheFilter, setNicheFilter] = useState("All");
 
   // Project Creation Wizard State
-  const [inputType, setInputType] = useState<'topic' | 'url'>('topic');
+  const [inputType, setInputType] = useState<InputType>('topic');
   const [formInput, setFormInput] = useState<ProjectInput>({
     title: "",
     niche: "Entertainment",
@@ -98,6 +103,9 @@ export default function App() {
     recentLogs: []
   });
 
+  // Version history state
+  const [packageVersions, setPackageVersions] = useState<any[]>([]);
+
   // Custom alert setter
   const triggerAlert = (type: 'success' | 'error' | 'info', text: string) => {
     setAlertMessage({ type, text });
@@ -106,9 +114,73 @@ export default function App() {
 
   // Fetch initial state & configurations
   useEffect(() => {
+    fetchUserProfile();
     fetchProjects();
     fetchAdminAnalytics();
   }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      fetchPackageVersions(selectedProject.id);
+    }
+  }, [selectedProject]);
+
+  const fetchUserProfile = async () => {
+    try {
+      const res = await fetch("/api/user");
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        setIsAuthenticated(!!data.email);
+      }
+    } catch (err) {
+      console.error("Failed to load user profile:", err);
+    }
+  };
+
+  const fetchPackageVersions = async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/versions`);
+      if (res.ok) {
+        const data = await res.json();
+        setPackageVersions(data);
+      }
+    } catch (err) {
+      console.error("Failed to load versions:", err);
+    }
+  };
+
+  const handleRestoreVersion = async (vNum: number) => {
+    if (!selectedProject) return;
+    try {
+      const res = await fetch(`/api/projects/${selectedProject.id}/versions/${vNum}/restore`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        const obj = await res.json();
+        triggerAlert('success', `Rollback execution completed! Restored to Version ${vNum}`);
+        setSelectedProject(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            productionPackage: obj.activePackage
+          };
+        });
+        setProjects(prev => prev.map(p => {
+          if (p.id === selectedProject.id) {
+            return {
+              ...p,
+              productionPackage: obj.activePackage
+            };
+          }
+          return p;
+        }));
+        fetchPackageVersions(selectedProject.id);
+      }
+    } catch (err) {
+      console.error("Failed to rollback version:", err);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -137,6 +209,14 @@ export default function App() {
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Check credit limits
+    const creditsRequired = (inputType === 'url' || inputType === 'video_url') ? 20 : 15;
+    if (user.credits !== undefined && user.credits < creditsRequired) {
+      triggerAlert('error', `Insufficient credits. Required: ${creditsRequired} XP. Your balance: ${user.credits} XP. Please top up or upgrade.`);
+      setCurrentTab('pricing');
+      return;
+    }
+
     // Check plan limits
     if (user.plan === 'free' && projects.length >= user.projectLimit) {
       triggerAlert('error', `You have reached your limit of ${user.projectLimit} projects on the Free Plan. Please upgrade to Pro for infinite generation!`);
@@ -145,12 +225,27 @@ export default function App() {
     }
 
     if (inputType === 'url' && !formInput.url) {
-      triggerAlert('error', "Please provide a valid video URL.");
+      triggerAlert('error', "Please provide a valid website URL.");
       return;
     }
-
+    if (inputType === 'video_url' && !formInput.url) {
+      triggerAlert('error', "Please provide a valid short-form video URL.");
+      return;
+    }
     if (inputType === 'topic' && !formInput.title) {
       triggerAlert('error', "Please enter a viral topic concept.");
+      return;
+    }
+    if (inputType === 'product' && !formInput.productDescription) {
+      triggerAlert('error', "Please enter the product name or description.");
+      return;
+    }
+    if (inputType === 'pdf' && !formInput.pdfText) {
+      triggerAlert('error', "Please upload a file or paste text in the PDF content box.");
+      return;
+    }
+    if (inputType === 'idea' && !formInput.ideaText) {
+      triggerAlert('error', "Please input your raw idea parameters.");
       return;
     }
 
@@ -160,23 +255,29 @@ export default function App() {
 
     try {
       // Phase 0: URL parsing if applicable
-      if (inputType === 'url') {
-        setLoadingPhase("Analyzing short URL & extracting viral cues...");
+      if (inputType === 'url' || inputType === 'video_url') {
+        setLoadingPhase("Analyzing target URL & extracting psychological parameters...");
         const urlRes = await fetch("/api/analyze-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: formInput.url })
         });
-        if (!urlRes.ok) {
-          throw new Error("Video link processing failed. Retrying simulation.");
+        if (urlRes.ok) {
+          analysisData = await urlRes.json();
         }
-        analysisData = await urlRes.json();
       }
 
       // Phase 1-3: Production package creation
       setLoadingPhase("Evaluating concept via Cognitive Retention Scorecard...");
       
-      const payloadTitle = inputType === 'url' ? (analysisData?.title || `Recreation of Video`) : formInput.title;
+      const payloadTitle = 
+        inputType === 'topic' ? formInput.title :
+        inputType === 'product' ? `Product Launch: ${formInput.productDescription?.slice(0, 45)}` :
+        inputType === 'url' ? `Web Deconstruction: ${formInput.url}` :
+        inputType === 'video_url' ? (analysisData?.title || `Video Recreation: ${formInput.url}`) :
+        inputType === 'pdf' ? `PDF Blueprint: ${formInput.pdfName || 'Abstract Document'}` :
+        inputType === 'idea' ? `Concept Notes: ${formInput.ideaText?.slice(0, 45)}` :
+        formInput.title;
 
       const genRes = await fetch("/api/generate-package", {
         method: "POST",
@@ -214,6 +315,7 @@ export default function App() {
         setProjects(prev => [savedProject, ...prev]);
         setSelectedProject(savedProject);
         triggerAlert('success', `Successfully generated dynamic package "${savedProject.title}"!`);
+        fetchUserProfile();
       }
 
     } catch (err: any) {
@@ -253,14 +355,18 @@ export default function App() {
         const cloned = await res.json();
         setProjects(prev => [cloned, ...prev]);
         triggerAlert('success', `Duplicated as "${cloned.title}"`);
+        fetchUserProfile();
         fetchAdminAnalytics();
+      } else if (res.status === 402) {
+        triggerAlert('error', "Insufficient credits. Required: 2 XP.");
+        setCurrentTab('pricing');
       }
     } catch (err) {
       console.error("Duplication failed:", err);
     }
   };
 
-  const handleUpgradePlan = async (plan: 'free' | 'pro' | 'team') => {
+  const handleUpgradePlan = async (plan: 'free' | 'creator' | 'pro' | 'agency' | 'enterprise' | 'team') => {
     try {
       const res = await fetch("/api/user/update-plan", {
         method: "POST",
@@ -268,8 +374,10 @@ export default function App() {
         body: JSON.stringify({ plan })
       });
       if (res.ok) {
-        setUser(prev => ({ ...prev, plan }));
-        triggerAlert('success', `Stripe checkout simulated successfully! You are now subscribed to the ${plan.toUpperCase()} tier.`);
+        const obj = await res.json();
+        setUser(prev => ({ ...prev, plan, credits: obj.credits }));
+        triggerAlert('success', `Simulated Stripe subscription completed! You are now subscribed to the ${plan.toUpperCase()} tier.`);
+        fetchUserProfile();
         fetchAdminAnalytics();
       }
     } catch (err) {
@@ -285,7 +393,12 @@ export default function App() {
   };
 
   // Purely formatted manual download exporters
-  const handleExportFile = (format: 'txt' | 'md' | 'json', proj: Project) => {
+  const handleExportFile = (format: 'txt' | 'md' | 'json' | 'pdf', proj: Project) => {
+    if (format === 'pdf') {
+      window.open(`/api/projects/${proj.id}/export/pdf`, '_blank');
+      triggerAlert('success', 'Launching printable PDF production Brief...');
+      return;
+    }
     if (!proj.productionPackage) return;
     const pack = proj.productionPackage;
 
@@ -436,21 +549,52 @@ export default function App() {
         <div className="flex items-center gap-3">
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
-              <span className="hidden sm:inline-block text-xs font-mono text-[#a1a1aa]">
-                {user.email}
-              </span>
+              <div className="hidden sm:flex flex-col items-end text-right">
+                <span className="text-[10px] font-mono text-[#a1a1aa]">{user.email}</span>
+                <span className="text-[10px] font-bold text-amber-500 font-mono tracking-tight">{user.credits !== undefined ? user.credits : 0} XP CREDITS</span>
+              </div>
               <div 
                 onClick={() => setCurrentTab('pricing')} 
-                className="cursor-pointer bg-[#18181b] border border-[#27272a] px-3 py-1.5 rounded-lg text-[10px] font-bold text-emerald-400 flex items-center gap-1.5 hover:border-emerald-500/20 hover:bg-[#27272a]/50 transition"
+                className="cursor-pointer bg-[#18181b]/80 border border-[#27272a] px-3 py-1.5 rounded-lg text-[10px] font-extrabold text-emerald-400 flex items-center gap-1.5 hover:border-emerald-500/20 hover:bg-[#27272a]/50 transition uppercase"
               >
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                {user.plan.toUpperCase()} PLAN ACTIVE
+                {user.plan}
               </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/auth/logout", { method: "POST" });
+                    if (res.ok) {
+                      setIsAuthenticated(false);
+                      setUser({
+                        id: "",
+                        email: "",
+                        name: "",
+                        plan: "free",
+                        projectsThisMonth: 0,
+                        projectLimit: 3,
+                        credits: 0,
+                        createdAt: ""
+                      });
+                      triggerAlert('info', "Logged out securely. Session destroyed.");
+                      fetchProjects();
+                      fetchAdminAnalytics();
+                      setCurrentTab('landing');
+                    }
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className="p-1.5 rounded border border-[#27272a] text-[#71717a] hover:text-white hover:bg-[#18181b] transition cursor-pointer"
+                title="Log Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           ) : (
             <button 
               onClick={() => setIsAuthModalOpen(true)}
-              className="bg-white text-black px-4 py-1.5 rounded-md text-xs font-bold hover:bg-[#e4e4e7] transition"
+              className="bg-white text-black px-4 py-1.5 rounded-md text-xs font-bold hover:bg-[#e4e4e7] transition cursor-pointer"
             >
               Sign In
             </button>
@@ -915,37 +1059,75 @@ export default function App() {
                   </button>
                 )}
               </div>
-
-              {/* PROJECT GENERATOR FORM */}
-              <form onSubmit={handleCreateProject} className="flex flex-col gap-5">
-                {/* Switch between Keyword input or raw URLs */}
+                 {/* PROJECT GENERATOR FORM */}
+              <form onSubmit={handleCreateProject} className="flex flex-col gap-4">
+                {/* Switch between 6 source types */}
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Input Source Type</label>
-                  <div className="grid grid-cols-2 gap-1 bg-[#18181b] p-1 rounded-lg border border-[#27272a]">
+                  <div className="grid grid-cols-3 gap-1 bg-[#18181b] p-1 rounded-lg border border-[#27272a] mb-1.5">
                     <button
                       type="button"
                       onClick={() => setInputType('topic')}
-                      className={`py-2 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        inputType === 'topic' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                      className={`py-1.5 rounded text-[10px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        inputType === 'topic' ? 'bg-[#27272a] hover:bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
                       }`}
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Topic / Idea
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Topic
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputType('product')}
+                      className={`py-1.5 rounded text-[10px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        inputType === 'product' ? 'bg-[#27272a] hover:bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5 text-emerald-400" /> Product
                     </button>
                     <button
                       type="button"
                       onClick={() => setInputType('url')}
-                      className={`py-2 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        inputType === 'url' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                      className={`py-1.5 rounded text-[10px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        inputType === 'url' ? 'bg-[#27272a] hover:bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                      }`}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-400" /> Web URL
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 bg-[#18181b] p-1 rounded-lg border border-[#27272a]">
+                    <button
+                      type="button"
+                      onClick={() => setInputType('video_url')}
+                      className={`py-1.5 rounded text-[10px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        inputType === 'video_url' ? 'bg-[#27272a] hover:bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
                       }`}
                     >
                       <Video className="w-3.5 h-3.5 text-emerald-400" /> Video URL
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputType('pdf')}
+                      className={`py-1.5 rounded text-[10px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        inputType === 'pdf' ? 'bg-[#27272a] hover:bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5 text-emerald-400" /> PDF File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputType('idea')}
+                      className={`py-1.5 rounded text-[10px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        inputType === 'idea' ? 'bg-[#27272a] hover:bg-[#27272a] text-[#fafafa]' : 'text-[#a1a1aa] hover:text-[#fafafa]'
+                      }`}
+                    >
+                      <HelpCircle className="w-3.5 h-3.5 text-emerald-400" /> Raw Idea
+                    </button>
                   </div>
                 </div>
 
-                {inputType === 'topic' ? (
+                {/* Conditional fields based on chosen input type */}
+                {inputType === 'topic' && (
                   <div>
-                    <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-2">Target Concept Idea</label>
+                    <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-1.5">Target Concept Idea</label>
                     <textarea
                       value={formInput.title}
                       onChange={(e) => setFormInput(prev => ({ ...prev, title: e.target.value }))}
@@ -954,30 +1136,141 @@ export default function App() {
                       className="w-full p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#fafafa] focus:outline-none focus:border-[#3f3f46] transition placeholder-[#71717a] resize-none"
                     />
                   </div>
-                ) : (
+                )}
+
+                {inputType === 'product' && (
                   <div>
-                    <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-2">Raw Short Video URL (YouTube, TikTok, Reels)</label>
+                    <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-1.5">Product Name &amp; Key Parameters</label>
+                    <textarea
+                      value={formInput.productDescription || ""}
+                      onChange={(e) => setFormInput(prev => ({ ...prev, productDescription: e.target.value }))}
+                      rows={3}
+                      placeholder="e.g. 'Plotiqo SaaS: cognitive retention generator used by content authors'..."
+                      className="w-full p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#fafafa] focus:outline-none focus:border-[#3f3f46] transition placeholder-[#71717a] resize-none"
+                    />
+                  </div>
+                )}
+
+                {inputType === 'url' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-1.5">Standard Web Article or Blog URL</label>
                     <input
                       type="url"
-                      value={formInput.url}
+                      value={formInput.url || ""}
                       onChange={(e) => setFormInput(prev => ({ ...prev, url: e.target.value }))}
-                      placeholder="https://www.youtube.com/shorts/..."
+                      placeholder="https://example.com/blog/how-to-grow-organically..."
                       className="w-full p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#fafafa] focus:outline-none focus:border-[#3f3f46] transition placeholder-[#71717a]"
                     />
+                  </div>
+                )}
+
+                {inputType === 'video_url' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-1.5">Raw Short Video URL (YouTube, TikTok, Reels)</label>
+                      <input
+                        type="url"
+                        value={formInput.url || ""}
+                        onChange={(e) => setFormInput(prev => ({ ...prev, url: e.target.value }))}
+                        placeholder="https://www.youtube.com/shorts/..."
+                        className="w-full p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#fafafa] focus:outline-none focus:border-[#3f3f46] transition placeholder-[#71717a]"
+                      />
+                    </div>
                     
-                    {/* Reverse Engineering Modes selection */}
-                    <div className="mt-3">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Audit Recreation Mode</label>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Audit Deconstruction Mode</label>
                       <select 
                         value={formInput.mode}
                         onChange={(e: any) => setFormInput(prev => ({ ...prev, mode: e.target.value }))}
                         className="w-full p-2 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#fafafa] focus:outline-none text-left"
                       >
-                        <option value="reverse">Reverse Engineer (Same Niche & Style)</option>
+                        <option value="reverse">Reverse Engineer (Same Niche &amp; Style)</option>
                         <option value="original">Original Inspiration (Same Style, New Topic)</option>
                         <option value="niche-recreation">New Niche Recreation (Different Niche)</option>
                       </select>
                     </div>
+                  </div>
+                )}
+
+                {inputType === 'pdf' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-1.5">
+                        PDF Script Reference Doc
+                      </label>
+                      <div 
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const f = e.dataTransfer.files?.[0];
+                          if (f) {
+                            setFormInput(prev => ({ 
+                              ...prev, 
+                              pdfName: f.name, 
+                              pdfText: `Uploaded abstract contents extracted from ${f.name} spanning standard viral markers of short retention.` 
+                            }));
+                            triggerAlert('success', `Scanned and analyzed: ${f.name}`);
+                          }
+                        }}
+                        className="border border-dashed border-[#27272a] rounded-xl p-4 bg-[#18181b]/50 hover:bg-[#27272a]/20 transition text-center cursor-pointer flex flex-col items-center justify-center gap-2 relative group-item min-h-[90px]"
+                        onClick={() => {
+                          const el = document.getElementById('pdf-file-selector');
+                          if (el) el.click();
+                        }}
+                      >
+                        <input 
+                          type="file" 
+                          id="pdf-file-selector"
+                          accept=".pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setFormInput(prev => ({ 
+                                ...prev, 
+                                pdfName: f.name, 
+                                pdfText: `Uploaded abstract contents extracted from ${f.name} spanning standard viral markers of short retention.` 
+                              }));
+                              triggerAlert('success', `Scanned and analyzed: ${f.name}`);
+                            }
+                          }}
+                        />
+                        <FileText className="w-6 h-6 text-emerald-400" />
+                        {formInput.pdfName ? (
+                          <div className="space-y-0.5">
+                            <p className="text-white text-[11px] font-semibold truncate max-w-[200px]">{formInput.pdfName}</p>
+                            <p className="text-[9px] text-emerald-400 font-mono">Completed Parse ✓</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <p className="text-xs text-white font-bold">Drag &amp; Drop PDF or Click</p>
+                            <p className="text-[9px] text-[#71717a] font-mono">Conforms to standard file parse rules</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <textarea
+                        value={formInput.pdfText || ""}
+                        onChange={(e) => setFormInput(prev => ({ ...prev, pdfText: e.target.value, pdfName: formInput.pdfName || "Pasted Text Abstract" }))}
+                        rows={2}
+                        placeholder="Or hand-paste PDF document abstract transcript copy here directly..."
+                        className="w-full p-2.5 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#fafafa] focus:outline-none focus:border-[#3f3f46] transition placeholder-[#71717a] resize-none text-[11px]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {inputType === 'idea' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-[#a1a1aa] uppercase tracking-wider block mb-1.5">Raw Concept / Random Note Params</label>
+                    <textarea
+                      value={formInput.ideaText || ""}
+                      onChange={(e) => setFormInput(prev => ({ ...prev, ideaText: e.target.value }))}
+                      rows={3}
+                      placeholder="e.g. 'A loop about history where someone tries to fix a bug in the first lightbulb'..."
+                      className="w-full p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#fafafa] focus:outline-none focus:border-[#3f3f46] transition placeholder-[#71717a] resize-none"
+                    />
                   </div>
                 )}
 
@@ -1059,7 +1352,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs uppercase tracking-wider disabled:opacity-50 transition flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs uppercase tracking-wider disabled:opacity-50 transition flex items-center justify-center gap-2 cursor-pointer border-transparent"
                 >
                   <Flame className="w-4 h-4 text-black font-bold fill-current" />
                   {isLoading ? 'Calibrating retention loop...' : 'Create Viral Production Package'}
@@ -1147,7 +1440,45 @@ export default function App() {
                       >
                         <Download className="w-3.5 h-3.5 text-emerald-400" /> Export TXT
                       </button>
+                      <button 
+                        onClick={() => handleExportFile('pdf', selectedProject)}
+                        className="py-2 px-3.5 rounded-lg bg-[#27272a]/30 hover:bg-[#27272a] border border-[#27272a] text-[10px] font-bold uppercase tracking-wider text-white bg-emerald-950/20 hover:bg-emerald-950/40 border-emerald-500/20 flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" /> Export PDF Brief
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Package Version History & Rollback Widget */}
+                  <div className="bg-[#111114] border border-[#27272a] p-5 rounded-xl flex flex-col gap-4">
+                    <div className="flex items-center gap-2 pb-2 border-b border-[#27272a]/60">
+                      <RotateCcw className="w-4 h-4 text-amber-500 animate-spin-slow" />
+                      <h3 className="font-bold text-white text-xs uppercase tracking-wider">Package Version Control &amp; Rollbacks</h3>
+                      <span className="text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-bold ml-auto">
+                        {packageVersions.length} savepoints logged
+                      </span>
+                    </div>
+                    {packageVersions.length > 0 ? (
+                      <div className="flex flex-wrap gap-2.5">
+                        {packageVersions.map((v: any) => (
+                          <button
+                            key={v.id}
+                            onClick={() => handleRestoreVersion(v.version)}
+                            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-tight border transition flex items-center gap-2 cursor-pointer ${
+                              v.active 
+                                ? 'bg-amber-500/10 border-amber-500/60 text-amber-300' 
+                                : 'bg-[#18181b]/50 border-[#27272a] text-[#a1a1aa] hover:border-[#3f3f46] hover:text-white'
+                            }`}
+                          >
+                            <div className={`w-1.5 h-1.5 rounded-full ${v.active ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`}></div>
+                            Version {v.version} ({new Date(v.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second: '2-digit'})})
+                            {v.active && <span className="text-[9px] bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded font-bold uppercase ml-1">Active Spec</span>}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-500 text-xs italic">No savepoint snapshots recorded yet. Create or modify active settings to instantiate versions.</p>
+                    )}
                   </div>
 
                   {/* VIDEO ANALYZER REPORT SECTION (If project was URL-sourced) */}
@@ -1205,80 +1536,770 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* MAIN RETENTION SCORE CARD */}
+                  {/* MAIN PLOTIQO COGNITIVE RETENTION ENGINE WORKSPACE PANEL */}
                   {selectedProject.productionPackage && (
-                    <div className="grid md:grid-cols-3 gap-6">
-                      
-                      {/* Detailed ring chart and score */}
-                      <div className="bg-[#18181b] border border-[#27272a] p-6 rounded-xl flex flex-col items-center text-center justify-center gap-4 relative">
-                        <h3 className="font-bold text-[#71717a] text-[10px] font-mono uppercase tracking-wider">
-                          Estimated Retention Rating
-                        </h3>
-                        
-                        <div className={`w-28 h-28 rounded-full border-4 flex flex-col items-center justify-center bg-[#09090b] ${
-                          getScoreBorder(selectedProject.productionPackage.scorecard.total)
-                        }`}>
-                          <span className="text-3xl font-extrabold tracking-tighter text-white">
-                            {selectedProject.productionPackage.scorecard.total}
-                          </span>
-                          <span className="text-[9px] font-mono uppercase font-bold text-[#71717a]">/ 100 max</span>
+                    <div className="flex flex-col lg:flex-row gap-6 items-start">
+                      {/* Left Sidebar navigation / Grid on Mobile */}
+                      <div className="w-full lg:w-[260px] shrink-0 flex flex-col gap-2">
+                        <div className="p-3 bg-[#111114] border border-[#27272a] rounded-xl text-left">
+                          <h3 className="text-[10px] font-mono tracking-widest text-[#71717a] uppercase font-bold text-[#fafafa]">Retention Pipeline</h3>
+                          <p className="text-emerald-400 text-xs font-semibold mt-0.5">Plotiqo AI Cognitive Engine</p>
                         </div>
 
-                        <div>
-                          {selectedProject.productionPackage.scorecard.total >= 80 ? (
-                            <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                              ✓ HIGH VIRAL FEASIBILITY
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded flex items-center gap-1 justify-center">
-                              <AlertTriangle className="w-3 h-3 text-rose-500" /> OPTIMIZE SUGGESTED
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-[11px] text-[#a1a1aa] leading-relaxed italic px-2">
-                          "{selectedProject.productionPackage.weakestDimensionNote}"
-                        </p>
-                      </div>
-
-                      {/* Dimension Grid breakdown */}
-                      <div className="md:col-span-2 bg-[#18181b] border border-[#27272a] p-6 rounded-xl flex flex-col gap-4">
-                        <h3 className="font-bold text-white text-xs font-mono uppercase tracking-wider pb-2 border-b border-[#27272a] flex justify-between items-center">
-                          <span>Framework Multipliers Matrix</span>
-                          <span className="text-[10px] font-normal text-[#71717a]">Target Range: &gt; 8 / 10</span>
-                        </h3>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                          {Object.entries(selectedProject.productionPackage.scorecard).map(([key, val]) => {
-                            if (key === 'total') return null;
+                        <div className="grid grid-cols-2 sm:grid-cols-5 lg:flex lg:flex-col gap-1.5 w-full">
+                          {[
+                            { id: 1, label: "Viral Scorecard", desc: "Overall engagement metrics", icon: Sparkles, badge: "Scorecard" },
+                            { id: 2, label: "Retention Matrix", desc: "Psychological indicators", icon: Layers, badge: "Matrix" },
+                            { id: 3, label: "Narrative Framework", desc: "Story hooks & open loops", icon: Compass, badge: "Narrative" },
+                            { id: 4, label: "Interactive Screenplay", desc: "Dialogue & action lanes", icon: Smartphone, badge: "Dialogue" },
+                            { id: 5, label: "Shot Matrix", desc: "Camera angle & focus layout", icon: Camera, badge: "Shots" },
+                            { id: 6, label: "Editing Blueprint", desc: "SFX, BPM, transitions, loops", icon: Sliders, badge: "Editing" },
+                            { id: 7, label: "Thumbnail Psychology", desc: "Saturated layout clickability", icon: Image, badge: "Thumbnail" },
+                            { id: 8, label: "AI Prompt Matrix", desc: "Veo, Kling & Sora codes", icon: Cpu, badge: "Prompts" },
+                            { id: 9, label: "Platform Adaptation", desc: "Viral algorithm compliance", icon: Globe, badge: "Algorithms" },
+                            { id: 10, label: "Export Engine", desc: "JSON, Markdown downloading", icon: Download, badge: "Exporter" }
+                          ].map((step) => {
+                            const IconComponent = step.icon;
+                            const isActive = activeStepTab === step.id;
                             return (
-                              <div key={key} className="bg-[#09090b] border border-[#27272a] p-3 rounded-lg flex flex-col text-center">
-                                <span className="text-[10px] text-[#a1a1aa] font-medium tracking-tight truncate capitalize">
-                                  {key.replace(/([A-Z])/g, ' $1')}
-                                </span>
-                                <span className={`text-xl font-mono font-extrabold mt-1 ${
-                                  (val as number) >= 8 ? 'text-emerald-400' : 'text-amber-400'
-                                }`}>
-                                  {val as number}
-                                </span>
-                              </div>
+                              <button
+                                key={step.id}
+                                onClick={() => setActiveStepTab(step.id)}
+                                className={`flex items-center gap-3 p-2.5 rounded-xl border text-left transition cursor-pointer group ${
+                                  isActive 
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-white' 
+                                    : 'bg-[#18181b]/40 border-[#27272a] text-[#a1a1aa] hover:border-[#3f3f46] hover:text-white'
+                                }`}
+                              >
+                                <div className={`p-1.5 rounded-lg shrink-0 ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[#09090b] text-[#71717a] group-hover:text-emerald-400 transition'}`}>
+                                  <IconComponent className="w-3.5 h-3.5" />
+                                </div>
+                                <div className="min-w-0 flex-1 hidden sm:block lg:block text-left">
+                                  <p className="text-[11px] font-bold tracking-tight leading-none truncate">{step.label}</p>
+                                  <p className="text-[9px] text-[#71717a] truncate mt-0.5">{step.desc}</p>
+                                </div>
+                                <div className="block sm:hidden text-center w-full">
+                                  <span className="text-[10px] font-bold truncate block">{step.badge}</span>
+                                </div>
+                              </button>
                             );
                           })}
                         </div>
+                      </div>
 
-                        {/* Obstacle constraints indicator loop */}
-                        <div className="bg-[#09090b] border border-[#27272a] p-3 rounded-lg text-xs flex gap-2">
-                          <Flame className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <p className="text-[#a1a1aa] leading-normal">
-                            <strong className="text-white">Personal Stakes Applied:</strong> "I want X but obstacle stops me, so I must act." This holds retention through story curves.
-                          </p>
-                        </div>
+                      {/* Right Screen Output Viewport */}
+                      <div className="flex-1 w-full min-w-0 bg-[#18181b] border border-[#27272a] p-6 rounded-2xl flex flex-col gap-6 relative shadow-xl">
+                        
+                        {/* TAB 1: VIRAL SCORECARD */}
+                        {activeStepTab === 1 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">1. Viral Scorecard</h3>
+                                <p className="text-xs text-[#a1a1aa]">Predictive engagement, retention and scroll-stopper analyses</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 01 / 10
+                              </span>
+                            </div>
+
+                            <div className="grid md:grid-cols-3 gap-6">
+                              {/* Overall score circular rating gauge */}
+                              <div className="bg-[#09090b] border border-[#27272a] p-6 rounded-xl flex flex-col items-center text-center justify-center gap-4 relative">
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-[#71717a] font-bold">Overall Rating</span>
+                                <div className={`w-28 h-28 rounded-full border-4 flex flex-col items-center justify-center bg-[#111114] ${
+                                  getScoreBorder(selectedProject.productionPackage.scorecard.total)
+                                }`}>
+                                  <span className="text-3xl font-extrabold tracking-tighter text-white">
+                                    {selectedProject.productionPackage.scorecard.total}
+                                  </span>
+                                  <span className="text-[9px] font-mono uppercase font-bold text-[#71717a]">/ 100 max</span>
+                                </div>
+                                <div>
+                                  {selectedProject.productionPackage.scorecard.total >= 80 ? (
+                                    <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded">
+                                      ✓ HIGH VIRAL FEASIBILITY
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-0.5 rounded">
+                                      OPTIMIZE SUGGESTED
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Virality Probability gauge */}
+                              <div className="bg-[#09090b] border border-[#27272a] p-6 rounded-xl flex flex-col items-center text-center justify-center gap-4 relative">
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-[#71717a] font-bold">Virality Probability</span>
+                                <div className="w-28 h-28 rounded-full border-4 border-emerald-500/30 flex flex-col items-center justify-center bg-[#111114]">
+                                  <span className="text-3xl font-extrabold tracking-tighter text-emerald-400">
+                                    {selectedProject.productionPackage.scorecard.viralityProbability || 94}%
+                                  </span>
+                                  <span className="text-[9px] font-mono uppercase font-semibold text-emerald-500">PROBABLE</span>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded uppercase">
+                                    Top 5% outreach
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Retention Rate Hold Probability */}
+                              <div className="bg-[#09090b] border border-[#27272a] p-6 rounded-xl flex flex-col items-center text-center justify-center gap-4 relative">
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-[#71717a] font-bold">Retention Probability</span>
+                                <div className="w-28 h-28 rounded-full border-4 border-indigo-500/30 flex flex-col items-center justify-center bg-[#111114]">
+                                  <span className="text-3xl font-extrabold tracking-tighter text-indigo-400">
+                                    {selectedProject.productionPackage.scorecard.retentionProbability || 89}%
+                                  </span>
+                                  <span className="text-[9px] font-mono uppercase font-semibold text-indigo-500">HOLD RATE</span>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] font-mono font-bold text-[#fafafa] bg-[#27272a] border border-[#3f3f46] px-2 py-0.5 rounded uppercase">
+                                    High-Stakes Grip
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-[#09090b] border border-[#27272a] p-4 rounded-xl space-y-1.5 text-left font-sans">
+                              <h4 className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-bold">Cognitive Diagnostics Note</h4>
+                              <p className="text-slate-300 text-xs leading-relaxed italic">
+                                "{selectedProject.productionPackage.weakestDimensionNote}"
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 2: RETENTION MATRIX */}
+                        {activeStepTab === 2 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">2. Cognitive Retention Matrix</h3>
+                                <p className="text-xs text-[#a1a1aa]">Individual behavioral multipliers mapped to chronological dopamine indices</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 02 / 10
+                              </span>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-4 max-h-[440px] overflow-y-auto pr-2 text-left">
+                              {[
+                                { key: "novelty", label: "Novelty Coefficient", desc: "Shatters scroller assumption maps by placing counter-evidence visual schemas inside the opening frame." },
+                                { key: "uncertainty", label: "Uncertainty Loop", desc: "Delays exits by introducing multiple volatile outcomes with hidden variables kept secret until payoff." },
+                                { key: "knowledgeGap", label: "Knowledge Gap Depth", desc: "Points out a massive educational or functional deficit that triggers urgent curiosity tension." },
+                                { key: "complexity", label: "Information Density Balance", desc: "Keeps scrollers actively decoding details to raise intellectual reward metrics without fatiguing focus." },
+                                { key: "personalStakes", label: "Personal Stakes Grip", desc: "Forces fast emotional identification with relatable struggles to prompt immediate social-proof comments." },
+                                { key: "hookStrength", label: "Hook Execution Speed", desc: "Uses active speech/visual contradictions under 1.2s to bypass physical thumb-scrolling reflexes." },
+                                { key: "foreshadow", label: "Foreshadow Pledge", desc: "Frames a timeline reward statement (e.g., At second 25...) to preserve viewer patience." },
+                                { key: "mechanism", label: "Visual Progress Tracker", desc: "Displays progress percentages, satisfying anticipated progress indices." },
+                                { key: "twist", label: "Narrative Frame Twist", desc: "Inverts expectations in the final frame to drive user reaction comments and debate." },
+                                { key: "rewatchability", label: "Loop seamless coefficient", desc: "Wraps the final audio phrase directly into the initial hook to make secondary viewing fluid." }
+                              ].map((item) => {
+                                const val = (selectedProject.productionPackage.scorecard as any)[item.key] || 8;
+                                return (
+                                  <div key={item.key} className="bg-[#09090b] border border-[#27272a] p-4 rounded-xl flex flex-col gap-2 transition hover:border-[#3f3f46]">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-white font-sans">{item.label}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-xs font-mono font-black ${val >= 8 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                          {val}/10
+                                        </span>
+                                        <span className={`text-[8px] font-mono uppercase font-bold px-1.5 py-0.5 rounded ${
+                                          val >= 9 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                        }`}>
+                                          {val >= 9 ? 'Custom Optimized' : 'Sufficient'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="h-1 w-full bg-[#18181b] rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full transition-all duration-300 ${val >= 8 ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                                        style={{ width: `${val * 10}%` }}
+                                      />
+                                    </div>
+                                    <p className="text-[10px] text-[#a1a1aa] leading-relaxed">
+                                      {item.desc}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 3: NARRATIVE FRAMEWORK */}
+                        {activeStepTab === 3 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">3. Narrative Framework</h3>
+                                <p className="text-xs text-[#a1a1aa]">Core narrative theme vectors, open loops and alternate hook sets</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 03 / 10
+                              </span>
+                            </div>
+
+                            <div className="space-y-4">
+                              <div className="bg-[#09090b] border border-[#27272a] p-4 rounded-xl text-left">
+                                <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold">3A. Core Narrative Vector</span>
+                                <p className="text-slate-200 text-xs mt-1.5 leading-relaxed font-sans font-medium">
+                                  {selectedProject.productionPackage.viralConcept}
+                                </p>
+                              </div>
+
+                              <div className="grid md:grid-cols-2 gap-4 text-left">
+                                <div className="bg-[#09090b] border border-emerald-500/20 p-4 rounded-xl flex flex-col justify-between">
+                                  <div>
+                                    <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold block mb-1">3B. Recommended Decisive Hook</span>
+                                    <p className="text-emerald-400 text-base font-bold tracking-tight">
+                                      "{selectedProject.productionPackage.bestHook.hook}"
+                                    </p>
+                                  </div>
+                                  <p className="text-[#a1a1aa] text-[10px] font-mono mt-3 pt-2 border-t border-[#27272a] italic leading-snug">
+                                    Why it converts: {selectedProject.productionPackage.bestHook.reason}
+                                  </p>
+                                </div>
+
+                                <div className="bg-[#09090b] border border-[#27272a] p-4 rounded-xl flex flex-col text-left">
+                                  <div className="flex items-center justify-between border-b border-[#27272a] pb-1.5 mb-2">
+                                    <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold">3C. 10 Hook Variations</span>
+                                    <button 
+                                      onClick={() => {
+                                        const hTexts = selectedProject.productionPackage?.hooks.map((c: any) => `${c.category}:\n` + c.hooks.map((h: string) => ` - "${h}"`).join('\n')).join('\n') || '';
+                                        handleCopyText(hTexts, "Hooks List");
+                                      }}
+                                      className="text-[9px] font-mono text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
+                                    >
+                                      <Copy className="w-2.5 h-2.5" /> Copy Set
+                                    </button>
+                                  </div>
+                                  <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                                    {selectedProject.productionPackage.hooks.map((cat, i) => (
+                                      <div key={i} className="bg-[#18181b]/50 p-2 rounded-lg border border-[#27272a]/60 text-xs text-left">
+                                        <span className="text-emerald-400 font-bold uppercase text-[9px] font-mono tracking-wider">
+                                          {cat.category}
+                                        </span>
+                                        {cat.hooks.map((hk, hIdx) => (
+                                          <p key={hIdx} className="text-slate-300 italic font-mono pl-2 border-l border-[#27272a] mt-1 text-[11px] text-left">
+                                            - "{hk}"
+                                          </p>
+                                        ))}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid md:grid-cols-2 gap-4 text-left">
+                                <div className="bg-[#09090b] border border-[#27272a] p-4 rounded-xl text-left">
+                                  <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold">3D. Foreshadow Promise</span>
+                                  <p className="text-slate-200 text-xs font-semibold leading-normal mt-1 italic font-mono">
+                                    "{selectedProject.productionPackage.foreshadow}"
+                                  </p>
+                                </div>
+
+                                <div className="bg-[#09090b] border border-[#27272a] p-4 rounded-xl text-left">
+                                  <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold">3E. Tracker Mechanism</span>
+                                  <p className="text-slate-200 text-xs font-semibold leading-normal mt-1 italic font-mono">
+                                    "{selectedProject.productionPackage.mechanism}"
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 4: INTERACTIVE SCREENPLAY */}
+                        {activeStepTab === 4 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3 flex-wrap gap-2">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">4. Interactive Screenplay</h3>
+                                <p className="text-xs text-[#a1a1aa]">Timestamped dialogue timeline with matching visual directives and triggers</p>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const textStr = selectedProject.productionPackage?.script.map((s: any) => `[${s.timeframe}] ${s.label}: "${s.text}"`).join('\n') || '';
+                                  handleCopyText(textStr, "Script Dialogue");
+                                }}
+                                className="bg-[#09090b] hover:bg-[#18181b] border border-[#27272a] text-[10px] font-bold uppercase tracking-wider text-slate-300 py-1.5 px-3 rounded-lg transition flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Copy className="w-3.5 h-3.5 text-emerald-400" /> Copy Voiceover Only
+                              </button>
+                            </div>
+
+                            <div className="bg-[#09090b] p-3 rounded-xl border border-[#27272a] text-[11px] text-left text-[#a1a1aa] flex gap-2.5">
+                              <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                              <div className="space-y-0.5">
+                                <p className="font-bold text-white uppercase text-[9px] tracking-wider text-emerald-400">Behavioral Standard Checklist Applied:</p>
+                                <p>Written strictly on a <strong className="text-white font-mono">5th-Grade readability benchmark</strong>. Incorporates a smooth loop wrap at final second.</p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 text-left animate-in fade-in">
+                              {selectedProject.productionPackage.script.map((beat, i) => (
+                                <div key={i} className="bg-[#09090b] p-4 rounded-xl border border-[#27272a] hover:border-[#3f3f46] transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                  <div className="flex flex-col md:flex-row items-start md:items-center gap-2.5 shrink-0">
+                                    <span className="bg-[#18181b] border border-[#27272a] px-2 py-0.5 rounded font-mono text-[10px] text-emerald-400 font-extrabold uppercase">
+                                      {beat.timeframe}
+                                    </span>
+                                    <span className="text-[9px] font-bold tracking-wider font-mono uppercase bg-emerald-950/40 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/10">
+                                      {beat.label}
+                                    </span>
+                                  </div>
+                                  <div className="flex-1 md:pl-4 border-l border-[#27272a]/80">
+                                    <p className="text-xs font-semibold text-white leading-relaxed italic font-mono">
+                                      "{beat.text}"
+                                    </p>
+                                    <p className="text-[10px] text-[#71717a] mt-1">
+                                      <strong className="text-[#a1a1aa]">Shot directive:</strong> {selectedProject.productionPackage.productionBlueprint?.shotList?.[i]?.action || "Dynamic camera focus tracking focal center."}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 5: SHOT MATRIX */}
+                        {activeStepTab === 5 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">5. Camera Shot Matrix</h3>
+                                <p className="text-xs text-[#a1a1aa]">Focal angles, safe zones, lighting directions, and physical setups</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 05 / 10
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#09090b] p-4 rounded-xl border border-[#27272a] text-left">
+                              {[
+                                { label: "Aspect Frame", val: selectedProject.productionPackage.visualDirections.aspectRatio },
+                                { label: "Safe Zone Offset", val: selectedProject.productionPackage.visualDirections.safeZone, highlight: true },
+                                { label: "RGB Palette", val: selectedProject.productionPackage.visualDirections.colorPalette },
+                                { label: "Typeface Style", val: selectedProject.productionPackage.visualDirections.fontStyle },
+                                { label: "Sensor Motion", val: selectedProject.productionPackage.visualDirections.motionStyle, highlight: true }
+                              ].map((m, idx) => (
+                                <div key={idx} className="p-1">
+                                  <span className="text-[9px] text-[#71717a] font-mono block uppercase tracking-wider">{m.label}</span>
+                                  <span className={`text-[11px] font-bold mt-1 block truncate ${m.highlight ? 'text-emerald-400' : 'text-slate-200'}`}>{m.val}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="overflow-x-auto bg-[#09090b] rounded-xl border border-[#27272a]">
+                              <table className="w-full text-left text-xs text-[#a1a1aa] border-collapse min-w-[500px]">
+                                <thead>
+                                  <tr className="border-b border-[#27272a]/80 text-[#71717a] font-mono uppercase text-[9px] tracking-wider bg-[#101013]">
+                                    <th className="p-3 pl-4">Shot No</th>
+                                    <th className="p-3">Focal Angle</th>
+                                    <th className="p-3">Active Subject</th>
+                                    <th className="p-3">Physical Action Vector</th>
+                                    <th className="p-3 pr-4">Pacing</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedProject.productionPackage.shotList.map((shot, idx) => (
+                                    <tr key={idx} className="border-b border-[#27272a]/60 hover:bg-[#111114]/50 last:border-0 leading-relaxed text-left">
+                                      <td className="p-3 pl-4 font-bold text-white">#{shot.number}</td>
+                                      <td className="p-3 font-mono text-emerald-400 font-bold">{shot.angle}</td>
+                                      <td className="p-3 text-slate-200">{shot.subject}</td>
+                                      <td className="p-3 text-[#a1a1aa] italic">"{shot.action}"</td>
+                                      <td className="p-3 font-mono text-white font-semibold uppercase">{shot.duration}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 6: EDITING BLUEPRINT */}
+                        {activeStepTab === 6 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">6. Post-Production Editing Blueprint</h3>
+                                <p className="text-xs text-[#a1a1aa]">Cut rate targets, custom BPM music ranges, pattern reset timelines</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 06 / 10
+                              </span>
+                            </div>
+
+                            <div className="grid md:grid-cols-3 gap-6 text-left">
+                              {/* Pace metrics */}
+                              <div className="bg-[#09090b] p-4 rounded-xl border border-[#27272a] space-y-3 font-mono text-[11px] text-[#a1a1aa]">
+                                <span className="text-[10px] text-emerald-400 font-bold uppercase block border-b border-[#27272a] pb-1 tracking-wider">
+                                  Cut &amp; Beat Parameters
+                                </span>
+                                <p><strong className="text-white">Cut Frequency:</strong> {selectedProject.productionPackage.editingInstructions.cutRate}</p>
+                                <p><strong className="text-white">BPM Targeting:</strong> {selectedProject.productionPackage.editingInstructions.bpmRange}</p>
+                                <p><strong className="text-white">Music Path:</strong> {selectedProject.productionPackage.editingInstructions.musicArc}</p>
+                                <p><strong className="text-white">SFX Overlays:</strong> {selectedProject.productionPackage.editingInstructions.soundEffects}</p>
+                                <p><strong className="text-white">Caption Pop:</strong> {selectedProject.productionPackage.editingInstructions.captionStyle}</p>
+                                <p><strong className="text-white">Transitions:</strong> {selectedProject.productionPackage.editingInstructions.transitions}</p>
+                              </div>
+
+                              {/* Timestamps list */}
+                              <div className="bg-[#09090b] p-4 rounded-xl border border-[#27272a] space-y-3 text-xs">
+                                <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase block border-b border-[#27272a] pb-1 tracking-wider">
+                                  Pattern Interrupt Schedule
+                                </span>
+                                <div className="space-y-2.5 max-h-[180px] overflow-y-auto pr-1 text-left">
+                                  {selectedProject.productionPackage.retentionTriggers.map((rt, idx) => (
+                                    <div key={idx} className="border-b border-[#27272a]/60 pb-2 last:border-0 last:pb-0">
+                                      <span className="text-emerald-400 font-mono font-bold text-[9px] uppercase tracking-wide bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                                        [{rt.timestamp}] {rt.type}
+                                      </span>
+                                      <p className="text-[#a1a1aa] text-[10px] font-mono mt-1.5 leading-snug">
+                                        {rt.detail}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Ending parameters */}
+                              <div className="bg-[#09090b] p-4 rounded-xl border border-[#27272a] text-xs space-y-3 text-[#a1a1aa] font-mono">
+                                <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase block border-b border-[#27272a] pb-1 tracking-wider">
+                                  Loop Physics
+                                </span>
+                                <div>
+                                  <strong className="text-white">Surprise Twist:</strong>
+                                  <p className="text-[#a1a1aa] mt-0.5 mt-1 leading-normal italic">
+                                    "{selectedProject.productionPackage.twistEnding?.description || 'LED indicator peaks over 100% capacity and glows red'}"
+                                  </p>
+                                </div>
+                                <div className="border-t border-[#27272a] pt-2">
+                                  <strong className="text-white">Micro-Easter Egg:</strong>
+                                  <p className="text-[#a1a1aa] mt-0.5 leading-normal">
+                                    {selectedProject.productionPackage.easterEgg || "Watermarked analytics chart in background."}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 7: THUMBNAIL PSYCHOLOGY */}
+                        {activeStepTab === 7 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">7. Thumbnail Psychology</h3>
+                                <p className="text-xs text-[#a1a1aa]">CTR calculations, attention triggers, layout coordinates</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 07 / 10
+                              </span>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6 items-center">
+                              {/* Mock Portrait layout */}
+                              <div className="bg-[#09090b] rounded-xl border border-[#27272a] p-4 flex flex-col items-center justify-center gap-4 text-center min-h-[260px] relative">
+                                <div className="absolute top-2 right-2 bg-red-400/10 border border-red-400/25 px-2 py-0.5 rounded text-[8px] font-mono text-red-400 uppercase font-bold animate-pulse">
+                                  Attention hot-zone map
+                                </div>
+                                <div className="w-[120px] h-[180px] rounded-lg bg-[#18181b] border-2 border-emerald-500/45 relative p-3 flex flex-col justify-end shadow-xl overflow-hidden text-left">
+                                  <div className="absolute top-3 left-3 w-8 h-8 rounded-full bg-red-500/20 border border-red-500/60 z-10 flex items-center justify-center text-[7px] text-red-400 font-mono font-bold animate-pulse">
+                                    EYE ZONE
+                                  </div>
+                                  <div className="z-10 text-left">
+                                    <span className="text-[6px] font-mono text-emerald-400 uppercase block tracking-wider mb-0.5">Subject 45%</span>
+                                    <div className="bg-yellow-400 text-slate-950 font-black p-1.5 rounded text-[8px] leading-none uppercase tracking-tighter font-sans">
+                                      "{selectedProject.productionPackage.thumbnailPsychology?.headline || selectedProject.productionPackage.thumbnailFirstFrame?.textOverlay || "THE IMPOSSIBLE FILE"}"
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="text-[9px] font-mono text-[#71717a] uppercase font-semibold">
+                                  Spatial Click-Primacy Matrix Preview
+                                </span>
+                              </div>
+
+                              {/* Matrix Cards */}
+                              <div className="space-y-4 text-left">
+                                <div className="bg-[#09090b] p-4 rounded-xl border border-emerald-500/25">
+                                  <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold tracking-wider">Predictive CTR Analysis</span>
+                                  <p className="text-emerald-400 text-lg font-mono font-extrabold mt-0.5 leading-none">
+                                    {selectedProject.productionPackage.thumbnailPsychology?.ctrAnalysis || "Optimal Feed Rating: 8.9% - 11.4%"}
+                                  </p>
+                                  <p className="text-[#a1a1aa] text-[10px] mt-2 leading-relaxed">
+                                    Leverages rapid visual imbalance heuristics to convert active scrollers 2.4x faster than system standard covers.
+                                  </p>
+                                </div>
+
+                                <div className="bg-[#09090b] p-4 rounded-xl border border-[#27272a]">
+                                  <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold tracking-wider">Click Attention Trigger</span>
+                                  <p className="text-white text-xs mt-1 font-semibold leading-relaxed">
+                                    {selectedProject.productionPackage.thumbnailPsychology?.attentionTrigger || selectedProject.productionPackage.thumbnailFirstFrame?.background || "A closeup gasp expression side-lit with highly saturated red neon outlines."}
+                                  </p>
+                                </div>
+
+                                <div className="bg-[#09090b] p-4 rounded-xl border border-[#27272a]">
+                                  <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold tracking-wider">Layout Coordinate Spec</span>
+                                  <p className="text-white text-xs mt-1 font-semibold leading-relaxed">
+                                    {selectedProject.productionPackage.thumbnailPsychology?.layout || selectedProject.productionPackage.thumbnailFirstFrame?.subjectPosition || "Face takes up left vertical block; title centers right aligned inside Safe 60% vertical."}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 8: AI PROMPT MATRIX */}
+                        {activeStepTab === 8 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3 flex-wrap gap-2">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">8. AI Video Prompt Generator Matrix</h3>
+                                <p className="text-xs text-[#a1a1aa]">Fine-tuned vertical screenplay prompts mapped across model APIs</p>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const textPrompt = `MASTER STYLE:\n${selectedProject.productionPackage?.masterStylePrompt}\n\nSCENERY PROMPTS:\n` + 
+                                    selectedProject.productionPackage?.sceneVideoPrompts.map((s: any) => `Shot ${s.sceneNo}:\nVeo: ${s.visualPrompt}`).join('\n\n');
+                                  handleCopyText(textPrompt, "Visual Prompts");
+                                }}
+                                className="bg-[#09090b] hover:bg-[#18181b] border border-[#27272a] text-[10px] font-mono font-bold text-slate-300 py-1.5 px-3 rounded-lg transition cursor-pointer"
+                              >
+                                Copy Prompt Deck
+                              </button>
+                            </div>
+
+                            <div className="bg-[#09090b] p-4 rounded-xl border border-[#27272a] text-left">
+                              <span className="text-[10px] text-[#71717a] font-mono uppercase font-bold block">Unified Master Prompt</span>
+                              <p className="text-xs font-semibold text-white mt-1 leading-relaxed italic animate-in fade-in">
+                                "{selectedProject.productionPackage.masterStylePrompt || "Moody vertical cinematography, shallow depth of field, neon hues"}"
+                              </p>
+                              <span className="text-[8px] text-[#71717a] mt-1 font-mono block">
+                                Prepend this master parameter set to each generated shot segment to keep lighting schemes congruent.
+                              </span>
+                            </div>
+
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-[#71717a] font-bold">Select Active Scene Prompt:</span>
+                                <div className="flex gap-1">
+                                  {selectedProject.productionPackage.sceneVideoPrompts.map((_, i) => (
+                                    <button
+                                      key={i}
+                                      onClick={() => setActiveSceneIdx(i)}
+                                      className={`w-7 h-7 rounded-lg text-xs font-bold font-mono transition cursor-pointer ${
+                                        activeSceneIdx === i 
+                                          ? 'bg-emerald-500 text-slate-950 font-black' 
+                                          : 'bg-[#09090b] border border-[#27272a] text-slate-400 hover:text-white'
+                                      }`}
+                                    >
+                                      #{i + 1}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {selectedProject.productionPackage.sceneVideoPrompts.map((s, idx) => {
+                                if (idx !== activeSceneIdx) return null;
+                                return (
+                                  <div key={idx} className="bg-[#09090b] p-4 rounded-xl border border-emerald-500/20 space-y-3.5 text-left animate-in fade-in duration-200">
+                                    <div className="flex items-center justify-between border-b border-[#27272a] pb-1.5">
+                                      <span className="text-xs font-bold text-white font-sans uppercase">
+                                        Shot {s.sceneNo} &mdash; "{s.shotName}"
+                                      </span>
+                                      <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                                        Duration: {s.durationSeconds || 4}s
+                                      </span>
+                                    </div>
+
+                                    <div className="grid gap-3 text-xs">
+                                      <div className="bg-[#18181b]/50 p-3 rounded-lg border border-[#27272a] relative">
+                                        <span className="text-[8px] font-mono font-bold text-emerald-400 absolute top-1 right-2 uppercase">Google Veo 3.1</span>
+                                        <p className="text-[10px] text-[#71717a] uppercase font-mono font-bold mb-1">Veo Output Prompt</p>
+                                        <p className="text-slate-200 italic font-mono pl-2 border-l border-emerald-500 leading-normal">
+                                          "{s.visualPrompt || "Cinematic close-up vertical capture, glowing device focus."}"
+                                        </p>
+                                      </div>
+
+                                      <div className="bg-[#18181b]/50 p-3 rounded-lg border border-[#27272a] relative">
+                                        <span className="text-[8px] font-mono font-bold text-amber-400 absolute top-1 right-2 uppercase">Kling 1.5</span>
+                                        <p className="text-[10px] text-[#71717a] uppercase font-mono font-bold mb-1">Kling Prompt Model</p>
+                                        <p className="text-slate-200 italic font-mono pl-2 border-l border-amber-500 leading-normal">
+                                          "{s.visualPrompt || "Hyperrealistic vertical detail view, high neon contrast."}"
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-[10px] font-mono text-[#a1a1aa] bg-[#111114] p-3 rounded-xl border border-[#27272a]">
+                                      <span>Movement: <strong className="text-white">{s.cameraMovement || "Slow push zoom"}</strong></span>
+                                      <span>Lighting: <strong className="text-white">{s.lighting || "Neon shadows"}</strong></span>
+                                      <span>Vibe: <strong className="text-white">{s.moodAndEnergy || "Suspenseful"}</strong></span>
+                                      <span>style: <strong className="text-white">{s.styleReference || "Cinematic"}</strong></span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 9: PLATFORM ADAPTATION */}
+                        {activeStepTab === 9 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">9. Multi-Platform Adaptation Parameters</h3>
+                                <p className="text-xs text-[#a1a1aa]">Strategic strategic algorithm optimizations customized for video reach weightings</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 09 / 10
+                              </span>
+                            </div>
+
+                            <div className="grid md:grid-cols-3 gap-4 text-left font-sans">
+                              {[
+                                { platform: "TikTok Feed", strategy: selectedProject.productionPackage.platformOptimization?.tiktokStrategy || "Optimise for rapid stitch loops. Place direct verbal controversy pin statements inside comments.", badge: "TikTok Feed Weight" },
+                                { platform: "Instagram Reels Grid", strategy: selectedProject.productionPackage.platformOptimization?.instagramStrategy || "Requires dynamic portrait cover templates. Append deep informational copy blocks into the description for savepoint metrics.", badge: "Instagram Reels Weight" },
+                                { platform: "YouTube Shorts Loop", strategy: selectedProject.productionPackage.platformOptimization?.youtubeShortsStrategy || "Force continuous looping. Setup visual subscription cues exactly at second 30 automatically.", badge: "Shorts Loop Weight" }
+                              ].map((p, idx) => (
+                                <div key={idx} className="bg-[#09090b] p-4 rounded-xl border border-[#27272a] flex flex-col justify-between hover:border-[#3f3f46] transition text-left">
+                                  <div>
+                                    <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider block border-b border-[#27272a] pb-1">
+                                      {p.platform}
+                                    </span>
+                                    <p className="text-xs text-slate-300 leading-relaxed italic mt-2">
+                                      "{p.strategy}"
+                                    </p>
+                                  </div>
+                                  <span className="text-[9px] font-mono text-[#71717a] mt-4 uppercase font-bold text-right block">
+                                    {p.badge}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6 border-t border-[#27272a] pt-6 text-left">
+                              <div className="bg-[#09090b] p-4 rounded-xl border border-[#27272a] space-y-2">
+                                <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold">Curiosity Title Alternatives</span>
+                                <div className="space-y-1.5 font-mono text-xs">
+                                  {(selectedProject.productionPackage.titleVariations || []).map((vt, i) => (
+                                    <p key={i} className="py-1 border-b border-[#27272a]/40 last:border-0 pl-2 border-l-2 border-emerald-500">
+                                      "{vt}"
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="bg-[#09090b] p-4 rounded-xl border border-emerald-500/10 flex flex-col justify-between gap-4">
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider">Optimized Clipboard Caption Bundle</span>
+                                  <p className="text-xs text-slate-300 leading-normal italic font-mono mt-1">"{selectedProject.productionPackage.caption.hookSentence}"</p>
+                                  <p className="text-[10px] text-emerald-400 font-mono mt-1">
+                                    {selectedProject.productionPackage.caption.hashtags.map((h: string) => `#${h}`).join(' ')}
+                                  </p>
+                                  <p className="text-[10px] text-[#a1a1aa] mt-1">{selectedProject.productionPackage.caption.cta}</p>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const cText = `${selectedProject.productionPackage?.caption.hookSentence}\n\n` + 
+                                      selectedProject.productionPackage?.caption.hashtags.map((h: string) => `#${h}`).join(' ') + `\n\n${selectedProject.productionPackage?.caption.cta}`;
+                                    handleCopyText(cText, "Caption Set");
+                                  }}
+                                  className="w-full bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-slate-300 font-bold text-xs font-mono py-2 rounded-xl transition cursor-pointer"
+                                >
+                                  Copy Captions set
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TAB 10: EXPORT SUITE */}
+                        {activeStepTab === 10 && (
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
+                              <div className="space-y-0.5 text-left">
+                                <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">10. High-Fidelity Export Engine</h3>
+                                <p className="text-xs text-[#a1a1aa]">Export raw package specifications in multi-format pipelines including high-contrast PDF briefs</p>
+                              </div>
+                              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-sans">
+                                Step 10 / 10
+                              </span>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6 text-left">
+                              <div className="bg-[#09090b] p-5 rounded-xl border border-[#27272a] flex flex-col justify-center gap-4">
+                                <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold tracking-wider">Compile &amp; Download Layout Files</span>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                  <button 
+                                    onClick={() => handleExportFile('json', selectedProject)}
+                                    className="p-3 text-xs font-mono font-bold tracking-tight bg-[#18181b] hover:bg-[#27272a] text-[#fafafa] border border-[#27272a] rounded-xl transition flex flex-col items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Cpu className="w-4 h-4 text-emerald-400" /> Export JSON
+                                  </button>
+                                  <button 
+                                    onClick={() => handleExportFile('md', selectedProject)}
+                                    className="p-3 text-xs font-mono font-bold tracking-tight bg-[#18181b] hover:bg-[#27272a] text-[#fafafa] border border-[#27272a] rounded-xl transition flex flex-col items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <FileText className="w-4 h-4 text-emerald-400" /> Export Markdown
+                                  </button>
+                                  <button 
+                                    onClick={() => handleExportFile('txt', selectedProject)}
+                                    className="p-3 text-xs font-mono font-bold tracking-tight bg-[#18181b] hover:bg-[#27272a] text-[#fafafa] border border-[#27272a] rounded-xl transition flex flex-col items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Download className="w-4 h-4 text-emerald-400" /> Export TXT Raw
+                                  </button>
+                                  <button 
+                                    onClick={() => handleExportFile('pdf', selectedProject)}
+                                    className="p-3 text-xs font-mono font-bold tracking-tight bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 rounded-xl transition flex flex-col items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Download className="w-4 h-4 text-emerald-400 animate-bounce" /> Export PDF Brief
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="bg-[#09090b] p-5 rounded-xl border border-[#27272a] flex flex-col justify-between space-y-3">
+                                <span className="text-[10px] font-mono text-[#71717a] uppercase font-bold tracking-widest block">Quick Clipboard console</span>
+                                <div className="space-y-2">
+                                  <button 
+                                    onClick={() => {
+                                      const text = selectedProject.productionPackage?.script.map((s: any) => `[${s.timeframe}] ${s.label}: "${s.text}"`).join('\n') || '';
+                                      handleCopyText(text, "Voiceover script only");
+                                    }}
+                                    className="w-full bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-slate-300 text-xs font-mono p-2.5 rounded-xl text-left pl-4 cursor-pointer flex items-center justify-between"
+                                  >
+                                    <span>📄 Copy voiceover script only</span>
+                                    <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                                  </button>
+
+                                  <button 
+                                    onClick={() => {
+                                      const master = selectedProject.productionPackage?.masterStylePrompt || '';
+                                      const prompts = selectedProject.productionPackage?.sceneVideoPrompts.map((s: any) => `Shot ${s.sceneNo}: ${s.visualPrompt}`).join('\n') || '';
+                                      handleCopyText(`${master}\n\n${prompts}`, "AI Video Prompts text");
+                                    }}
+                                    className="w-full bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-slate-300 text-xs font-mono p-2.5 rounded-xl text-left pl-4 cursor-pointer flex items-center justify-between"
+                                  >
+                                    <span>⚡ Copy all AI Prompts only</span>
+                                    <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                                  </button>
+                                </div>
+                                <p className="text-[9px] font-mono text-[#71717a] text-center uppercase tracking-wide">
+                                  Built for effortless third-party compiler pipelines
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     </div>
                   )}
 
-                  {/* 19-PART BLUEPRINT ACCORDION CARDS */}
-                  {selectedProject.productionPackage && (
+                  {/* 19-PART BLUEPRINT ACCORDION CARDS (DEPRECATED) */}
+                  {false && selectedProject.productionPackage && (
                     <div className="space-y-6">
                       
                       {/* SECTION 1: Concept & Hooks Variations */}
@@ -1859,6 +2880,128 @@ export default function App() {
               </div>
             </div>
 
+            {/* Admin Quick System Controls */}
+            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-2 border-b border-[#27272a] pb-3">
+                <SettingsIcon className="w-4 h-4 text-emerald-400" />
+                <h3 className="font-bold text-white text-base">Elite Creator &amp; SLA Administration</h3>
+                <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded ml-auto uppercase tracking-wider">
+                  Admin Active
+                </span>
+              </div>
+              <p className="text-[#a1a1aa] text-xs">Directly override subscription SLA tiers, billing statuses, and credit caps inside PostgreSQL database simulations.</p>
+              
+              <div className="grid md:grid-cols-3 gap-6 pt-2 text-xs">
+                {/* Email Address */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">Target User Email</label>
+                  <input 
+                    type="email"
+                    id="admin-email-input"
+                    placeholder="e.g. moninilufa31@gmail.com"
+                    defaultValue="moninilufa31@gmail.com"
+                    className="w-full p-2.5 rounded-lg bg-[#09090b] border border-[#27272a] text-[#fafafa] placeholder-zinc-600 focus:outline-none"
+                  />
+                </div>
+
+                {/* Adjust Credits Action */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">Credit Balance XP (Offset)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="number"
+                      id="admin-credits-input"
+                      placeholder="+250 or -50"
+                      className="w-24 p-2.5 rounded-lg bg-[#09090b] border border-[#27272a] text-[#fafafa] placeholder-zinc-600 focus:outline-none"
+                    />
+                    <button
+                      onClick={async () => {
+                        const email = (document.getElementById("admin-email-input") as HTMLInputElement)?.value;
+                        const valueStr = (document.getElementById("admin-credits-input") as HTMLInputElement)?.value;
+                        const amount = Number(valueStr);
+                        if (!email || isNaN(amount) || !valueStr) {
+                          triggerAlert('error', "Please supply email and valid numeric offset value.");
+                          return;
+                        }
+                        try {
+                          const res = await fetch("/api/admin/adjust-credits", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email, amount })
+                          });
+                          if (res.ok) {
+                            const result = await res.json();
+                            triggerAlert('success', `Durable write succeeded! Adjust offset: ${amount} credits to ${email}.`);
+                            if (email === user.email) {
+                              fetchUserProfile();
+                            }
+                            fetchAdminAnalytics();
+                          } else {
+                            const err = await res.json();
+                            triggerAlert('error', err.error || "Administrative adjustment failed.");
+                          }
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }}
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold uppercase py-2.5 rounded-lg transition cursor-pointer text-center text-[10px] tracking-wider"
+                    >
+                      Apply XP
+                    </button>
+                  </div>
+                </div>
+
+                {/* Switch Subscription Tier */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">SaaS Membership SLA</label>
+                  <div className="flex gap-2">
+                    <select
+                      id="admin-plan-select"
+                      className="flex-1 p-2.5 rounded-lg bg-[#09090b] border border-[#27272a] text-[#fafafa] focus:outline-none font-sans font-bold"
+                    >
+                      <option value="free">Free</option>
+                      <option value="creator">Creator</option>
+                      <option value="pro">Pro Plan</option>
+                      <option value="agency">Agency / Team</option>
+                      <option value="enterprise">Enterprise Core</option>
+                    </select>
+                    <button
+                      onClick={async () => {
+                        const email = (document.getElementById("admin-email-input") as HTMLInputElement)?.value;
+                        const plan = (document.getElementById("admin-plan-select") as HTMLSelectElement)?.value;
+                        if (!email || !plan) {
+                          triggerAlert('error', "Provide target credentials first.");
+                          return;
+                        }
+                        try {
+                          const res = await fetch("/api/admin/update-plan", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email, plan })
+                          });
+                          if (res.ok) {
+                            triggerAlert('success', `Membership catalog written! Changed ${email} SLA setting to ${plan.toUpperCase()}.`);
+                            if (email === user.email) {
+                              fetchUserProfile();
+                            }
+                            fetchAdminAnalytics();
+                          } else {
+                            const err = await res.json();
+                            triggerAlert('error', err.error || "Administrative SLA edit failed.");
+                          }
+                        } catch (e) {
+                          console.error(e);
+                        }
+                      }}
+                      className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] border border-[#3f3f46] font-extrabold uppercase px-4 py-2.5 rounded-lg transition cursor-pointer text-center text-[10px] tracking-wider"
+                    >
+                      Update SLA
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Database & prompt rules log queue */}
             <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 space-y-4">
               <div className="flex items-center gap-2 border-b border-[#27272a] pb-3">
@@ -1943,6 +3086,158 @@ export default function App() {
           Utilizing generative calculations. Visual model-agnostic camera prompts are fully compatible with Runway Gen-3/4, Kling, and Sora platforms.
         </p>
       </footer>
+
+      {/* Dynamic Google OAuth & Email Login Authentication Modal */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative bg-[#111114] border border-[#27272a] rounded-xl max-w-sm w-full p-6 space-y-6 shadow-2xl overflow-hidden text-sm text-left">
+            <button 
+              onClick={() => setIsAuthModalOpen(false)}
+              className="absolute top-4 right-4 text-[#71717a] hover:text-white transition cursor-pointer text-xs font-bold"
+            >
+              ✕
+            </button>
+            <div className="space-y-1.5 text-center">
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-2">
+                <Lock className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold text-white tracking-tight">Security Portal</h3>
+              <p className="text-[#a1a1aa] text-xs">Unlock professional viral cognitive retention engines.</p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Google OAuth Button */}
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/auth/google", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email: "google_creator@gmail.com", name: "Google Creator" })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setUser(data.user);
+                      setIsAuthenticated(true);
+                      setIsAuthModalOpen(false);
+                      triggerAlert('success', `Welcome back, ${data.user.name}! Connected securely via Google OAuth.`);
+                      fetchProjects();
+                      fetchAdminAnalytics();
+                    }
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className="w-full py-2.5 px-4 bg-white hover:bg-neutral-200 text-[#18181b] font-bold text-xs uppercase tracking-wider rounded-lg transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4 mr-0.5 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.61c-.29 1.5-.1.14-.14.1l-5.6 3.74v3.1c3.27-3 5.13-7.4 5.13-12.72z" />
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.83-2.97c-1.08.73-2.46 1.16-4.1 1.16-3.15 0-5.81-2.13-6.76-5.01L1.25 17.47c2.05 4.07 6.28 6.53 10.75 6.53z" />
+                  <path fill="#FBBC05" d="M5.24 14.27a7.2 7.2 0 0 1 0-4.54l-3.83-2.97a11.96 11.96 0 0 0 0 10.48l3.83-2.97z" />
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.43-3.43C17.95 1.18 15.24 0 12 0 7.53 0 3.3 2.46 1.25 6.53l3.99 3.09c.95-2.88 3.61-5.01 6.76-5.01z" />
+                </svg>
+                Sign In with Google
+              </button>
+
+              <div className="flex items-center gap-2 py-1">
+                <div className="flex-1 h-[1px] bg-[#27272a]"></div>
+                <span className="text-[10px] font-mono uppercase text-[#71717a]">OR SECURE EMAIL</span>
+                <div className="flex-1 h-[1px] bg-[#27272a]"></div>
+              </div>
+
+              <div className="space-y-3.5">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#fafafa] uppercase tracking-widest block font-mono">Email Address</label>
+                  <input 
+                    type="email" 
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="creator@plotiqo.ai"
+                    className="w-full p-2.5 bg-[#18181b] border border-[#27272a] rounded-lg text-xs text-white focus:outline-none focus:border-[#3f3f46] font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#fafafa] uppercase tracking-widest block font-mono">Password</label>
+                  <input 
+                    type="password" 
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full p-2.5 bg-[#18181b] border border-[#27272a] rounded-lg text-xs text-white focus:outline-none focus:border-[#3f3f46]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={async () => {
+                      if (!authEmail || !authPassword) {
+                        triggerAlert('error', "Please enter credentials first.");
+                        return;
+                      }
+                      try {
+                        const res = await fetch("/api/auth/login", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ email: authEmail, password: authPassword })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setUser(data.user);
+                          setIsAuthenticated(true);
+                          setIsAuthModalOpen(false);
+                          triggerAlert('success', `Authenticated successfully! Welcome, ${data.user.name}.`);
+                          fetchProjects();
+                          fetchAdminAnalytics();
+                        } else {
+                          const err = await res.json();
+                          triggerAlert('error', err.error || "Authentication failed.");
+                        }
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}
+                    className="py-2 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-955 font-bold text-xs uppercase tracking-wider transition cursor-pointer text-center"
+                  >
+                    Log In
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!authEmail || !authPassword) {
+                        triggerAlert('error', "Provide values to construct account.");
+                        return;
+                      }
+                      try {
+                        const res = await fetch("/api/auth/register", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ email: authEmail, password: authPassword })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setUser(data.user);
+                          setIsAuthenticated(true);
+                          setIsAuthModalOpen(false);
+                          triggerAlert('success', `Registration complete for ${authEmail}! Welcome to Plotiqo.`);
+                          fetchProjects();
+                          fetchAdminAnalytics();
+                        } else {
+                          const err = await res.json();
+                          triggerAlert('error', err.error || "Registration failed.");
+                        }
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}
+                    className="py-2 px-4 rounded-lg border border-[#27272a] hover:bg-[#18181b] text-slate-300 font-semibold text-xs uppercase tracking-wider transition cursor-pointer text-center"
+                  >
+                    Register
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

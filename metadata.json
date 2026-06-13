@@ -1,6 +1,6 @@
 {
-  "name": "Plotiqo ai",
-  "description": "Engineered short-form content package system utilizing live Cognitive Retention Dynamics and advanced behavioral video frameworks to produce high-retention hooks, visual plans, and script blueprints.",
+  "name": "Plotiqo AI",
+  "description": "Production-grade Cognitive Retention Engineering Platform. Transform simple concepts into complete high-retention viral content operating systems using behavioral psychology and narrative science.",
   "requestFramePermissions": [
     "camera",
     "microphone"

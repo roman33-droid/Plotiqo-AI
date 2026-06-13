@@ -2,25 +2,29 @@ export interface UserProfile {
   id: string;
   email: string;
   name: string;
-  plan: 'free' | 'pro' | 'team';
+  plan: 'free' | 'creator' | 'pro' | 'agency' | 'enterprise' | 'team';
   projectsThisMonth: number;
   projectLimit: number;
+  credits?: number;
   stripeSubscriptionId?: string;
   createdAt: string;
 }
 
-export type InputType = 'topic' | 'url';
+export type InputType = 'topic' | 'product' | 'url' | 'video_url' | 'pdf' | 'idea';
 
 export interface ProjectInput {
   title: string;
+  productDescription?: string;
+  url?: string;
+  pdfName?: string;
+  pdfText?: string;
+  ideaText?: string;
   niche: string;
   targetPlatform: 'TikTok' | 'YouTube Shorts' | 'Instagram Reels' | 'All';
   desiredLength: '34s' | '60s';
   audienceType: string;
   language: string;
-  url?: string;
   mode?: 'reverse' | 'original' | 'niche-recreation';
-  customTopic?: string;
 }
 
 export interface ViralScorecard {
@@ -34,19 +38,35 @@ export interface ViralScorecard {
   mechanism: number; // 0-10
   twist: number; // 0-10
   rewatchability: number; // 0-10
-  total: number; // Sum / 100
+  total: number; // Sum out of 100
+  viralityProbability?: number; // percentage, e.g. 95
+  retentionProbability?: number; // percentage, e.g. 88
 }
 
-export interface HookVariation {
-  category: 'Action' | 'Power Word' | 'Curiosity Gap' | 'Emotional' | 'Challenge';
-  hooks: string[]; // Length 2
+export interface ResearchEngineData {
+  hiddenFacts: string[];
+  surprisingStatistics: string[];
+  contrarianViewpoints: string[];
+  controversies: string[];
+  mechanisms: string[];
+  emotionalTriggers: string[];
 }
 
-export interface ScriptBeat {
-  timeframe: string;
+export interface NarrativeArchitectureData {
+  coreNarrative: string;
+  decisiveHook: string;
+  hookVariations: { category: string; hooks: string[] }[];
+  foreshadowPromise: string;
+  runtimeTracker: string; // e.g. progress bar
+  openLoops: string[];
+}
+
+export interface InteractiveScreenplayBeat {
+  timeframe: string; // "0-3s Hook", "3-8s Foreshadow", "8-12s Obstacle", "12-18s Adaptation", "18-25s Climax", "25-30s Payoff", "30-34s Twist"
   label: string;
-  text: string;
-  visualCue?: string;
+  voiceover: string;
+  visualDirection: string;
+  psychologyAnchor: string;
 }
 
 export interface Shot {
@@ -57,65 +77,12 @@ export interface Shot {
   duration: string;
 }
 
-export interface VideoPrompt {
-  sceneNo: number;
-  shotName: string;
-  durationSeconds: number;
-  visualPrompt: string;
-  cameraMovement: string;
-  lighting: string;
-  moodAndEnergy: string;
-  styleReference: string;
-  negativePrompt: string;
-}
-
-export interface AudioDirection {
-  genre: string;
-  energyArc: string;
-  bpmRange: string;
-  keyMoment: string;
-}
-
-export interface ProductionPackage {
-  // 1 & 2
-  viralConcept: string;
-  scorecard: ViralScorecard;
-  weakestDimensionNote: string;
-  
-  // 3 & 4
-  hooks: HookVariation[];
-  bestHook: {
-    hook: string;
-    reason: string;
-  };
-
-  // 5, 6, 7 & 8
-  foreshadow: string;
-  mechanism: string;
-  script: ScriptBeat[];
+export interface ProductionBlueprintData {
+  cameraAngles: string[];
   shotList: Shot[];
-
-  // 9, 10
-  visualDirections: {
-    aspectRatio: string;
-    safeZone: string;
-    colorPalette: string;
-    fontStyle: string;
-    motionStyle: string;
-  };
-  retentionTriggers: {
-    timestamp: string;
-    type: 'Pattern interrupt' | 'Open loop' | 'Emotional spike' | 'Reframe';
-    detail: string;
-  }[];
-
-  // 11, 12, 13, 14, 15
-  twistEnding: {
-    description: string;
-    spokenWords: string;
-  };
-  easterEgg: string;
-  rewatchTrigger: string;
+  lightingDesign: string;
+  colorGrade: string;
+  motionDirections: string;
   editingInstructions: {
     cutRate: string;
     musicArc: string;
@@ -126,16 +93,129 @@ export interface ProductionPackage {
     transitions: string;
     captionStyle: string;
   };
-  thumbnailFirstFrame: {
-    subjectPosition: string;
-    background: string;
-    textOverlay: string;
-    colorTreatment: string;
-  };
+  musicArc: string;
+  sfxCues: string[];
+}
 
-  // 16, 17, 18, 19
+export interface ScenePrompt {
+  sceneNo: number;
+  shotName: string;
+  durationSeconds: number;
+  veoPrompt: string;
+  klingPrompt: string;
+  runwayPrompt: string;
+  soraPrompt: string;
+  negativePrompt: string;
+}
+
+export interface AIVideoPromptData {
+  masterStyle: string;
+  veo: string;
+  kling: string;
+  runway: string;
+  sora: string;
+  scenePrompts: ScenePrompt[];
+}
+
+export interface PlatformOptimizationData {
+  tiktokStrategy: string;
+  instagramStrategy: string;
+  youtubeShortsStrategy: string;
+  facebookReelsStrategy: string;
+  captionSet: {
+    hookSentence: string;
+    hashtags: string[];
+    cta: string;
+  };
+}
+
+export interface ProductionPackage {
+  title: string;
+  viralConcept: string;
+  whyItWillGoViral: string[];
+  
+  // Step 1: Research Engine
+  research: ResearchEngineData;
+
+  // Step 2: Retention Engineering Engine
+  scorecard: ViralScorecard;
+  weakestDimensionNote: string;
+
+  // Step 3: Narrative Architecture
+  narrative: NarrativeArchitectureData;
+
+  // Step 4: Interactive Screenplay
+  screenplay: InteractiveScreenplayBeat[];
+
+  // Step 5: Production Blueprint
+  productionBlueprint: ProductionBlueprintData;
+
+  // Step 6: AI Video Prompt Generator
+  aiVideoPrompts: AIVideoPromptData;
+
+  // Step 7: Platform Optimization
+  platformOptimization: PlatformOptimizationData;
+
+  // Active fields directly matching generation output
+  bestHook: {
+    hook: string;
+    reason: string;
+  };
+  foreshadow: string;
+  mechanism: string;
+  script: {
+    timeframe: string;
+    label: string;
+    text: string;
+  }[];
+  shotList: Shot[];
+  hooks: {
+    category: string;
+    hooks: string[];
+  }[];
+  visualDirections: {
+    aspectRatio: string;
+    safeZone: string;
+    colorPalette: string;
+    fontStyle: string;
+    motionStyle: string;
+  };
+  retentionTriggers: {
+    timestamp: string;
+    type: string;
+    detail: string;
+  }[];
+  editingInstructions: {
+    cutRate: string;
+    musicArc: string;
+    bpmRange: string;
+    textOverlays: string;
+    soundEffects: string;
+    colorGrade: string;
+    transitions: string;
+    captionStyle: string;
+  };
+  masterStylePrompt: string;
+  sceneVideoPrompts: {
+    sceneNo: number;
+    shotName: string;
+    durationSeconds: number;
+    visualPrompt: string;
+    cameraMovement: string;
+    lighting: string;
+    moodAndEnergy: string;
+    styleReference: string;
+    negativePrompt: string;
+  }[];
+  audioDirections: {
+    genre: string;
+    energyArc: string;
+    bpmRange: string;
+    keyMoment: string;
+  };
+  titleVariations: string[];
   platformAdaptations: {
-    platform: 'TikTok' | 'YouTube Shorts' | 'Instagram Reels';
+    platform: string;
     adaptation: string;
   }[];
   caption: {
@@ -143,13 +223,26 @@ export interface ProductionPackage {
     hashtags: string[];
     cta: string;
   };
-  titleVariations: string[]; // 5
-  whyItWillGoViral: string[]; // 3-5 bullets
-  
-  // AI Video Module Section
-  masterStylePrompt: string;
-  sceneVideoPrompts: VideoPrompt[];
-  audioDirections: AudioDirection;
+
+  // Extra metadata for legacy compatibility (if needed)
+  twistEnding?: {
+    description: string;
+    spokenWords: string;
+  };
+  easterEgg?: string;
+  rewatchTrigger?: string;
+  thumbnailFirstFrame?: {
+    subjectPosition: string;
+    background: string;
+    textOverlay: string;
+    colorTreatment: string;
+  };
+  thumbnailPsychology?: {
+    ctrAnalysis: string;
+    attentionTrigger: string;
+    headline: string;
+    layout: string;
+  };
 }
 
 export interface VideoAnalysis {
@@ -177,13 +270,14 @@ export interface VideoAnalysis {
     tone: string;
     energyLevel: string;
   };
+  research?: ResearchEngineData; // Step 1 analysis back-feed
 }
 
 export interface Project {
   id: string;
   title: string;
-  input: ProjectInput;
   inputType: InputType;
+  input: ProjectInput;
   analysis?: VideoAnalysis;
   productionPackage?: ProductionPackage;
   createdAt: string;
