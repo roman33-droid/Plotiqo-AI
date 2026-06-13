@@ -1,0 +1,295 @@
+{
+  "projects": [
+    {
+      "id": "proj_gpb6uss0d",
+      "title": "bangladesh",
+      "inputType": "topic",
+      "input": {
+        "title": "bangladesh",
+        "niche": "Entertainment",
+        "targetPlatform": "YouTube Shorts",
+        "desiredLength": "34s",
+        "audienceType": "Gen Z Sludge Viewers",
+        "language": "English",
+        "url": "",
+        "mode": "reverse"
+      },
+      "productionPackage": {
+        "viralConcept": "A high-stakes, fast-paced Gen Z challenge featuring the world's most crowded train in Dhaka, Bangladesh. The video taps into the massive global fascination with Bangladesh's extreme train surfing culture, leveraging high visual stimulation, a literal survival countdown tracker, and intense personal stakes to maximize retention and trigger algorithmic shares.",
+        "scorecard": {
+          "novelty": 9,
+          "uncertainty": 9,
+          "knowledgeGap": 9,
+          "complexity": 8,
+          "personalStakes": 9,
+          "hookStrength": 10,
+          "foreshadow": 9,
+          "mechanism": 9,
+          "twist": 9,
+          "rewatchability": 9,
+          "total": 90
+        },
+        "weakestDimensionNote": "The complexity dimension is slightly lower because the goal of boarding the train is conceptually simple, which we offset by raising the visual chaos and speed of the narrative edits.",
+        "hooks": [
+          {
+            "category": "Action",
+            "hooks": [
+              "I am literally dangling off the fastest train in Bangladesh right now!",
+              "Watch me jump onto this moving train in Dhaka!"
+            ]
+          },
+          {
+            "category": "Power Word",
+            "hooks": [
+              "This illegal Bangladeshi train ride will break you.",
+              "The most dangerous commute on Earth is insane!"
+            ]
+          },
+          {
+            "category": "Curiosity Gap",
+            "hooks": [
+              "There is a secret way onto this train, and it looks impossible.",
+              "Why are thousands of people climbing on top of this train?"
+            ]
+          },
+          {
+            "category": "Emotional",
+            "hooks": [
+              "I almost lost my grip on the world's busiest train.",
+              "The look on this driver's face when I climbed up is priceless."
+            ]
+          },
+          {
+            "category": "Challenge",
+            "hooks": [
+              "Can an ordinary guy survive the extreme train ride of Bangladesh?",
+              "I tried to board this train in under 30 seconds or get left behind."
+            ]
+          }
+        ],
+        "bestHook": {
+          "hook": "I am literally dangling off the world's most crowded train in Bangladesh!",
+          "reason": "It combines intense physical danger (Action) with immediate high-contrast visual elements of Bangladesh's iconic train stations, forcing Gen Z scroll-stoppers to stay."
+        },
+        "foreshadow": "If I can't reach the roof before this timer hits zero, I get left behind in the chaotic crowd forever.",
+        "mechanism": "A neon red 30-second digital countdown timer and a pulsing heart rate monitor graphic overlaid on the screen.",
+        "script": [
+          {
+            "timeframe": "0-3s",
+            "label": "HOOK",
+            "text": "I am literally dangling off the world's most crowded train in Bangladesh!"
+          },
+          {
+            "timeframe": "3-8s",
+            "label": "FORESHADOW",
+            "text": "If I can't reach the roof before this timer hits zero, I get left behind in this chaotic crowd forever."
+          },
+          {
+            "timeframe": "8-12s",
+            "label": "STORY BEAT 1",
+            "text": "I wanted to ride inside the train normally, BUT over two thousand people are blocking every single door!"
+          },
+          {
+            "timeframe": "12-18s",
+            "label": "STORY BEAT 2",
+            "text": "SO I had to run fast, grab the cold steel ladder, and climb up the back of the moving carriage!"
+          },
+          {
+            "timeframe": "18-25s",
+            "label": "STORY BEAT 3 / PEAK EMOTION",
+            "text": "My hands are literally sweating and slipping! The wind is pushing me back, but look at the top! The locals are cheering me on!"
+          },
+          {
+            "timeframe": "25-30s",
+            "label": "MECHANISM PAYOFF",
+            "text": "With one second left on the clock, I swing my legs up and secure my spot on the roof!"
+          },
+          {
+            "timeframe": "30-34s",
+            "label": "TWIST + ENDING",
+            "text": "But suddenly, the conductor climbs up right behind me and tells me..."
+          }
+        ],
+        "shotList": [
+          {
+            "number": 1,
+            "angle": "Extreme Close Up",
+            "subject": "Main presenter's face",
+            "action": "Sweating, looking anxious as a train horn blares in the background",
+            "duration": "3s"
+          },
+          {
+            "number": 2,
+            "angle": "Wide Dynamic Shot",
+            "subject": "Dhaka Train Station",
+            "action": "Massive sea of people climbing on a colorful train with a countdown timer graphic",
+            "duration": "5s"
+          },
+          {
+            "number": 3,
+            "angle": "First Person POV",
+            "subject": "Train door",
+            "action": "Presenter pushing through a wall of passengers, getting shoved back",
+            "duration": "4s"
+          },
+          {
+            "number": 4,
+            "angle": "Low Angle Tracking Shot",
+            "subject": "Presenter's feet",
+            "action": "Running along the platform chasing the train, reaching for the ladder",
+            "duration": "6s"
+          },
+          {
+            "number": 5,
+            "angle": "GoPro Helmet POV",
+            "subject": "Climb up ladder",
+            "action": "Looking down showing the fast-moving train tracks below",
+            "duration": "7s"
+          },
+          {
+            "number": 6,
+            "angle": "Medium Shot",
+            "subject": "Presenter and Locals",
+            "action": "Presenter landing on the roof, high-fiving smiling Bangladeshi locals as the timer flashes 0.00",
+            "duration": "5s"
+          },
+          {
+            "number": 7,
+            "angle": "Quick Zoom-in",
+            "subject": "Conductor's face",
+            "action": "Conductor pointing at the camera, transitioning perfectly to the beginning of the loop",
+            "duration": "4s"
+          }
+        ],
+        "visualDirections": {
+          "aspectRatio": "9:16 vertical",
+          "safeZone": "Keep all essential texts and actions in the middle 60% vertical viewport to avoid platform overlay obstructions",
+          "colorPalette": "High contrast warm neon accents mixed with obsidian background matte and deep emerald greens of the train",
+          "fontStyle": "Slab sans serif bold, dynamic text pops in bright neon yellow and clean white outlines",
+          "motionStyle": "Rapid handheld shake with subtle zoom-punches and high-speed whip transitions"
+        },
+        "retentionTriggers": [
+          {
+            "timestamp": "3s",
+            "type": "Pattern interrupt",
+            "detail": "Loud, vibrating train horn sound effect accompanied by a screen-shake and bright red flash"
+          },
+          {
+            "timestamp": "12s",
+            "type": "Open loop",
+            "detail": "The POV camera slips slightly, showing the fast moving tracks underneath to spike viewer adrenaline"
+          },
+          {
+            "timestamp": "20s",
+            "type": "Emotional spike",
+            "detail": "The crowd on the roof starts screaming and reaching down to pull the presenter up"
+          },
+          {
+            "timestamp": "28s",
+            "type": "Reframe",
+            "detail": "The camera pans out to show a breathtaking, scale-shifting drone shot of thousands of people riding the train roofs"
+          }
+        ],
+        "twistEnding": {
+          "description": "The presenter successfully makes it to the roof just in time, but the train conductor instantly climbs up behind them, making eye contact, which prompts a sudden loop restart.",
+          "spokenWords": "...that I bought the wrong ticket! This is why..."
+        },
+        "easterEgg": "A small green and red flag of Bangladesh is hidden inside the countdown timer digits, blinking only when the clock hits odd numbers.",
+        "rewatchTrigger": "The ending sentence '...that I bought the wrong ticket! This is why...' perfectly links back to the hook 'I am literally dangling off...', creating a seamless and logical narrative loop.",
+        "editingInstructions": {
+          "cutRate": "8 cuts per 10 seconds",
+          "musicArc": "Aggressive, bass-heavy phonk beat building in speed, dropping completely to low-frequency hums right at the peak climb climax",
+          "bpmRange": "130 BPM",
+          "textOverlays": "Display word-by-word pop captions, max 2-3 words per frame in bright white and neon yellow outlines",
+          "soundEffects": "Whoosh transitions, metallic train squeaks, human crowd cheering, digital clock ticking",
+          "colorGrade": "Hyper-saturated cinematic grading, pulling out rich greens, deep reds, and bright yellow sunlight",
+          "transitions": "Fast zoom cuts, whip pans, and glitch transitions",
+          "captionStyle": "Word-by-word pop overlays with active emoji accents to hold Gen Z attention spans"
+        },
+        "thumbnailFirstFrame": {
+          "subjectPosition": "Subject occupies left 40% with a terrified, high-tension expression, hand extended to the viewer",
+          "background": "An incredibly crowded train rooftop speeding forward under a bright blue sky",
+          "textOverlay": "SURVIVE THIS TRAIN?",
+          "colorTreatment": "Thick neon yellow glow outline surrounding the main subject to pop on feed swipe"
+        },
+        "platformAdaptations": [
+          {
+            "platform": "TikTok",
+            "adaptation": "Ensure the first frame starts mid-action. Use trending fast-paced electronic tracks. Pin a comment asking: 'Could you survive this?' to drive comments."
+          },
+          {
+            "platform": "YouTube Shorts",
+            "adaptation": "First frame must act as thumbnail. Add a high-contrast red 'SUBSCRIBE' prompt flashing for half a second at 29s."
+          },
+          {
+            "platform": "Instagram Reels",
+            "adaptation": "Deliver high quality visual aesthetic. Ensure audio is synced perfectly with beat drops. Use highly targeted travel and adventure tags."
+          }
+        ],
+        "caption": {
+          "hookSentence": "Surviving the wildest train ride of my life in Bangladesh! 🇧🇩 Train surfing is seriously no joke.",
+          "hashtags": [
+            "bangladesh",
+            "dhaka",
+            "trainlife",
+            "travelchallenge",
+            "retentionengineering",
+            "extreme"
+          ],
+          "cta": "Could you hold on for 30 seconds? Let me know in the comments! 👇"
+        },
+        "titleVariations": [
+          "I Rode the World's Most Packet Train! 🇧🇩",
+          "Surviving Bangladesh's Crazy Rooftop Train!",
+          "They Banned This Train Ride... For Good Reason!",
+          "Can You Survive Bangladesh's Busiest Commute?",
+          "I Clutched a Moving Train in Dhaka!"
+        ],
+        "whyItWillGoViral": [
+          "Extreme Visual Novelty: The visual of thousands of people climbing on trains in Bangladesh has native high curiosity and clickability.",
+          "Gamified Danger: Using a physical countdown timer and a heart rate monitor turns a real-life vlog into a gamified survival experience.",
+          "Seamless Loop: The twist ending loops back to the start flawlessly, artificially multiplying the rewatch duration and pleasing the algorithm."
+        ],
+        "masterStylePrompt": "Hyperrealistic 4K vertical vlog style, intense sun flare, dynamic wide-angle action camera, highly saturated color palette, gritty cinematic look, rapid camera moves, shallow depth of field on subject, raw documentary realism.",
+        "sceneVideoPrompts": [
+          {
+            "sceneNo": 1,
+            "shotName": "HOOK Scene",
+            "durationSeconds": 3,
+            "visualPrompt": "A dynamic 4K close-up of a young male traveler looking terrified, sweat on his forehead, clutching a steel ladder with a moving train background, extreme color depth, hyper-realistic, action cam perspective.",
+            "cameraMovement": "Vibrating handheld camera push-in",
+            "lighting": "Bright natural sunlight with sharp shadows",
+            "moodAndEnergy": "High energy, panic, extreme urgency",
+            "styleReference": "Cinematic adventure vlog style",
+            "negativePrompt": "deformed, slow motion, clean studio lighting, fake CGI look, text overlays"
+          }
+        ],
+        "audioDirections": {
+          "genre": "High-octane electronic phonk with heavy bass elements and rhythmic metallic train track clanks",
+          "energyArc": "Rapidly climbing beat that intensifies as the presenter climbs, stopping abruptly with a deep sub-bass drop at 25 seconds",
+          "bpmRange": "125-135 BPM",
+          "keyMoment": "Sudden train horn blast at 3 seconds, beat drop with crowd cheers at 26 seconds, and total silence at 33 seconds for the twist"
+        }
+      },
+      "createdAt": "2026-06-13T19:15:50.444Z"
+    }
+  ],
+  "subscriptions": {},
+  "users": [],
+  "adminLogs": [
+    {
+      "id": "log_n2i28eio8",
+      "userEmail": "moninilufa31@gmail.com",
+      "action": "Project Created",
+      "timestamp": "2026-06-13T19:15:50.444Z",
+      "details": "Created project of type topic: bangladesh"
+    },
+    {
+      "id": "log_i56bcfx4k",
+      "userEmail": "moninilufa31@gmail.com",
+      "action": "Production Package Requested",
+      "timestamp": "2026-06-13T19:12:30.687Z",
+      "details": "Generating package for topic: bangladesh"
+    }
+  ]
+}

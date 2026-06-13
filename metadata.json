@@ -1,0 +1,11 @@
+{
+  "name": "Reelo ai",
+  "description": "Engineered short-form content package system utilizing live Cognitive Retention Dynamics and advanced behavioral video frameworks to produce high-retention hooks, visual plans, and script blueprints.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
